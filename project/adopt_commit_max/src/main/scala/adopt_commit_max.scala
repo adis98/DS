@@ -1,21 +1,24 @@
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern.ask
 import akka.util.Timeout
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.util.Random
 
+//TODO: Make the adopt commit max object
 
 class Processor extends Actor{    // Extending actor trait
   def receive = {                 //  Receiving message
     case "enable" => {
       println("execution for node "+ self.path.name)
-      sender() ! "Done"
+      //TODO: For now it just prints, but here the nodes would actually run archipelago
+      sender() ! 1
     }
     case "disable" =>
       println("disabled node "+self.path.name)      // Disabled case
-      sender() ! "Done"
+      sender() ! 1
   }
 }
 
@@ -33,20 +36,19 @@ class Puppeteer extends Actor{
       val nodeList = List.range(0,Main.N)
       val shuffledList = Random.shuffle(nodeList)
       val disabledNodes = shuffledList.take(Main.K) //take the first K nodes to be the disabled ones
-      //TODO: The line below is buggy, need a way to aggregate responses from all actors once they respond with "Done"
-      var results = Array[Future[String]](Main.N) //expect responses from the enabled nodes alone on completion
+      val results = Array.ofDim[Future[Int]](Main.N) //expect responses from the enabled nodes alone on completion
       for(i <- 0 until Main.N){
         if(disabledNodes contains(i)){
-          results(i) = ask(Main.node(i) , "disable").mapTo[String] //disable the node for this round
+          results(i) = ask(Main.node(i) , "disable").mapTo[Int] //disable the node for this round
         }
         else{
-          results(i) = ask(Main.node(i) , "enable").mapTo[String]
+          results(i) = ask(Main.node(i) , "enable").mapTo[Int]
         }
       }
-      //TODO: The lines below are part of the same issue mentioned above
-      val aggResult = Future.sequence(results)
-      Await.result(aggResult,300.seconds)
-      println("-------round finished--------")
+      val aggList = results.toList
+      val futList = Future.sequence(aggList)
+      Await.result(futList,Duration.Inf)
+      println("----------round done------------")
     }
   }
 }

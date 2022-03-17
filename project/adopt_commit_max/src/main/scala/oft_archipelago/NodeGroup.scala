@@ -3,6 +3,9 @@ package oft_archipelago
 import akka.actor.typed.scaladsl.{AbstractBehavior, ActorContext, Behaviors, LoggerOps}
 import akka.actor.typed.{ActorRef, Behavior, PostStop, Signal}
 import oft_archipelago.Main.NodeRegistered
+import oft_archipelago.Node.Stop
+
+import scala.util.Random
 
 object NodeGroup {
   def apply(): Behavior[Command] =
@@ -11,6 +14,11 @@ object NodeGroup {
   sealed trait Command
 
   private final case class NodeTerminated(node: ActorRef[Node.Command], nodeId: String) extends Command
+  final case class BroadcastR(rBroadcast: Node.RBroadcast) extends Command
+  final case class BroadcastA(aBroadcast: Node.ABroadcast) extends Command
+  final case class BroadcastB(bBroadcast: Node.BBroadcast) extends Command
+  final case class Start() extends Command
+  final case class Commit(value: Int, nodeId: String) extends Command
   final case class RequestTrackDevice(nodeId: String, replyTo: ActorRef[Main.Command]) extends Command
 }
 
@@ -32,9 +40,43 @@ class NodeGroup(context: ActorContext[NodeGroup.Command])
             context.log.info("Creating node actor for {}", trackMsg.nodeId)
             val nodeActor = context.spawn(Node(nodeId), s"node-$nodeId")
             nodeIdToActor += nodeId -> nodeActor
+            context.log.info("Map Size {}", nodeIdToActor.size)
+            if(nodeIdToActor.size > 19) {
+              nodeIdToActor.foreach { case (_, nodeActor) =>
+                val value = Random.nextInt(10)
+                nodeActor ! Node.Start(value)
+              }
+            }
             replyTo ! NodeRegistered(nodeActor)
         }
         this
+      case _ @ BroadcastR(rBroadcast) =>
+        nodeIdToActor.foreach { case (_, nodeActor) =>
+          if(nodeActor != rBroadcast.replyTo)
+            nodeActor ! rBroadcast
+        }
+        this
+      case _ @ BroadcastA(aBroadcast) =>
+        nodeIdToActor.foreach { case (_, nodeActor) =>
+          if(nodeActor != aBroadcast.replyTo)
+          nodeActor ! aBroadcast
+        }
+        this
+      case _ @ BroadcastB(bBroadcast) =>
+        nodeIdToActor.foreach { case (_, nodeActor) =>
+          if(nodeActor != bBroadcast.replyTo)
+          nodeActor ! bBroadcast
+        }
+        this
+      case _ @ Start() =>
+        context.log.info("Starting Archipelago")
+        this
+      case _ @ Commit(value, nodeId) =>
+        context.log.info("Received commit " + value.toString + " from " + nodeId)
+        nodeIdToActor.foreach { case (_, nodeActor) =>
+          nodeActor ! Stop()
+        }
+        Behaviors.stopped
     }
 
   override def onSignal: PartialFunction[Signal, Behavior[Command]] = {

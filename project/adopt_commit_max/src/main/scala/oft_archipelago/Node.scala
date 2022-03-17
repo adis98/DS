@@ -32,8 +32,6 @@ object Node {
 }
 
 class Node(context: ActorContext[Node.Command], nodeId: String, i: Int, R: Set[(Int, Int)], A: List[Set[Int]], B: List[Set[(Boolean, Int)]], RResponses: List[RResponse], AResponses: List[AResponse], BResponses: List[BResponse]) extends AbstractBehavior[Command](context) {
-  context.log.info("New node created/updated: {}", nodeId)
-
   import Node._
 
   override def onMessage(msg: Command): Behavior[Command] = {
@@ -126,14 +124,14 @@ class Node(context: ActorContext[Node.Command], nodeId: String, i: Int, R: Set[(
           } else {
             val trueElement = S.filter(x => x._1)
             if (trueElement.size == 1) {
-              context.log.info("Adopt! single elem in " + nodeId + " " + (i+1).toString)
+              context.log.info("Adopt! single elem " + trueElement.head._2 + " in " + nodeId + " " + (i+1).toString)
               propose(i + 1, trueElement.head._2)
             } else {
               context.log.info("Adopt! multiple elem in " + nodeId + " " + (i+1).toString)
               propose(i + 1, S.maxBy(_._2)._2)
             }
           }
-          new Node(context, nodeId, i + 1, R, A, B, RResponses, List.empty, BResponses)
+          new Node(context, nodeId, i + 1, R, A, B, RResponses, AResponses, List.empty)
         } else {
           new Node(context, nodeId, i, R, A, B, RResponses, AResponses, newBResponses)
         }

@@ -73,10 +73,7 @@ class NodeGroup(context: ActorContext[NodeGroup.Command])
         this
       case _ @ Commit(value, nodeId) =>
         context.log.info("Received commit " + value.toString + " from " + nodeId)
-        nodeIdToActor.foreach { case (_, nodeActor) =>
-          nodeActor ! Stop()
-        }
-        Behaviors.stopped
+        this
     }
 
   override def onSignal: PartialFunction[Signal, Behavior[Command]] = {

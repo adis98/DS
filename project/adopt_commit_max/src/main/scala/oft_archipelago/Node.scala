@@ -11,19 +11,12 @@ object Node {
   sealed trait Command
 
   final case class RBroadcast(i: Int, v: Int, replyTo: ActorRef[Node.Command]) extends Command
-
   private final case class RResponse(i: Int, R: Set[(Int, Int)]) extends Command
-
   final case class ABroadcast(i: Int, v: Int, replyTo: ActorRef[Node.Command]) extends Command
-
   private final case class AResponse(i: Int, aJ: Set[Int]) extends Command
-
   final case class BBroadcast(i: Int, flag: Boolean, v: Int, replyTo: ActorRef[Node.Command]) extends Command
-
   private final case class BResponse(i: Int, bJ: Set[(Boolean, Int)]) extends Command
-
   final case class Start(v: Int) extends Command
-
   final case class Stop() extends Command
 
   def apply(nodeId: String): Behavior[Command] =

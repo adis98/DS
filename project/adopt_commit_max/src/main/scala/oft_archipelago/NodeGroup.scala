@@ -13,13 +13,12 @@ object NodeGroup {
 
   sealed trait Command
 
-  private final case class NodeTerminated(node: ActorRef[Node.Command], nodeId: String) extends Command
+  final case class RequestTrackDevice(nodeId: String, replyTo: ActorRef[Main.Command]) extends Command
+  final case class Start() extends Command
+  final case class Commit(value: Int, nodeId: String) extends Command
   final case class BroadcastR(rBroadcast: Node.RBroadcast) extends Command
   final case class BroadcastA(aBroadcast: Node.ABroadcast) extends Command
   final case class BroadcastB(bBroadcast: Node.BBroadcast) extends Command
-  final case class Start() extends Command
-  final case class Commit(value: Int, nodeId: String) extends Command
-  final case class RequestTrackDevice(nodeId: String, replyTo: ActorRef[Main.Command]) extends Command
 }
 
 class NodeGroup(context: ActorContext[NodeGroup.Command])

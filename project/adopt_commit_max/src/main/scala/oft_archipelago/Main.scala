@@ -1,10 +1,8 @@
 package oft_archipelago
 
-import akka.actor.typed.scaladsl.adapter.TypedActorContextOps
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.actor.typed.scaladsl.{AbstractBehavior, ActorContext, Behaviors}
 import oft_archipelago.Main.Start
-import oft_archipelago.Node.{ABroadcast, RBroadcast}
 import oft_archipelago.NodeGroup.RequestTrackDevice
 
 object Main {

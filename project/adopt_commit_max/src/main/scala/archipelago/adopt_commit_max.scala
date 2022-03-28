@@ -7,6 +7,10 @@ import scala.collection.mutable.ArrayBuffer
 class max_register extends Actor{
   var register : Set[(Int,Int)] = Set((0,-1))
   def receive: PartialFunction[Any,Unit] = {
+    case "reset" => {
+      register = Set((0,-1))
+      Main.resetNode ! "max_register_reset"
+    }
     case (c:Int,v:Int) => //if some processor writes to the max register
       register = register + ((c,v)) //add element to set and send max value back
       sender() ! (register.max,"R_step_done")
@@ -21,6 +25,16 @@ class adopt_commit_max extends Actor{
     B += (("",-1))
   }
   def receive: PartialFunction[Any, Unit] = {
+    case "reset" => {
+      A = new ArrayBuffer[Int]()
+      B = new ArrayBuffer[(String,Int)]() //B contains a tuple of a string and an int for control and value
+      for(i <- 0 until Main.N){
+        A += -1 //initialize the array A
+        B += (("",-1))
+      }
+      Main.resetNode ! "adopt_commit_max_reset"
+    }
+
     case ("propose_A_step",v:Int) =>  //make the adopt commit max object perform until the collect of A step
       val index = sender().path.name.toInt //gets the index of the register to write to for the sending processor
       A(index) = v

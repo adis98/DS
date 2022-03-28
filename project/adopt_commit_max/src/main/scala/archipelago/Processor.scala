@@ -11,6 +11,15 @@ class Processor extends Actor{
   var pValue:Int = -1 //this is the value to propose. Initially -1
   var c = 0 //index of adopt_commit_max_object to refer to
   def receive: PartialFunction[Any, Unit] = {
+    case "reset" => {
+      state = 0
+      Sa = Set()
+      Sb = Set()
+      pValue = -1
+      c = 0
+      Main.resetNode ! "node_reset"
+    }
+
     case ((c_prime:Int,v:Int),"R_step_done") =>
       state = 1
       //println(self.path.name,"R_step done","state:",state)

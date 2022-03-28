@@ -11,6 +11,14 @@ class Puppeteer extends Actor {
   var procStats = new ArrayBuffer[Int]() //binary array that holds 0/1 for disabled/enabled processors in current round
   var alreadyDecided = 0
   def receive: PartialFunction[Any, Unit] = {
+    case "reset" => {
+      responses = 0
+      roundCnt = 0
+      procStats = new ArrayBuffer[Int]()
+      alreadyDecided = 0
+      Main.resetNode ! "puppeteer_reset"
+    }
+
     case "beginSimulation" =>
       beginSimulation()
 
@@ -23,6 +31,14 @@ class Puppeteer extends Actor {
           for (i <- 0 until Main.N) {
             Main.nodes(i) ! "printFinalValue"
           }
+          if(alreadyDecided == Main.N){ //if all processes have reached consensus then report as success else report failure
+            println("writing to file")
+            Main.writeData(1,roundCnt)
+          }
+          else{ //write the failure stats onto the file
+            println("writing to file")
+            Main.writeData(0,roundCnt)
+          }
         }
         else if(alreadyDecided != Main.N){
           procStats = getProcStatus(roundCnt)
@@ -32,6 +48,8 @@ class Puppeteer extends Actor {
           for (i <- 0 until Main.N) {
             Main.nodes(i) ! "printFinalValue"
           }
+          println("writing to file")
+          Main.writeData(1,roundCnt)
         }
       }
 

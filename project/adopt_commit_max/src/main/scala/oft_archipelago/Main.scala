@@ -23,6 +23,7 @@ class Main(context: ActorContext[Main.Command], nodes: Int, idToActorGroup: Map[
         val nodeGroup = context.spawn(NodeGroup(), "node-group")
         var dupGroup = idToActorGroup
         dupGroup += "node-group" -> nodeGroup
+        nodeGroup ! NodeGroup.Start()
         for(i <- 0 until N){
           nodeGroup ! RequestTrackDevice(i.toString, context.self)
         }

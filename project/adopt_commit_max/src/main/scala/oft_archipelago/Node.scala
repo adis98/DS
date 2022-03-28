@@ -19,12 +19,12 @@ object Node {
   final case class Start(v: Int) extends Command
   final case class Stop() extends Command
 
-  def apply(nodeId: String): Behavior[Command] =
-    Behaviors.setup(context => new Node(context, nodeId, 0, Set.empty, List.empty, List.empty, List.empty, List.empty, List.empty))
+  def apply(n: Int, nodeId: String): Behavior[Command] =
+    Behaviors.setup(context => new Node(context, n, nodeId, 0, Set.empty, List.empty, List.empty, List.empty, List.empty, List.empty))
 
 }
 
-class Node(context: ActorContext[Node.Command], nodeId: String, i: Int, R: Set[(Int, Int)], A: List[Set[Int]], B: List[Set[(Boolean, Int)]], RResponses: List[RResponse], AResponses: List[AResponse], BResponses: List[BResponse]) extends AbstractBehavior[Command](context) {
+class Node(context: ActorContext[Node.Command], n: Int, nodeId: String, i: Int, R: Set[(Int, Int)], A: List[Set[Int]], B: List[Set[(Boolean, Int)]], RResponses: List[RResponse], AResponses: List[AResponse], BResponses: List[BResponse]) extends AbstractBehavior[Command](context) {
   import Node._
 
   override def onMessage(msg: Command): Behavior[Command] = {
@@ -32,7 +32,7 @@ class Node(context: ActorContext[Node.Command], nodeId: String, i: Int, R: Set[(
       case _@RBroadcast(j, v, replyTo) =>
         val newR = R + ((j, v))
         replyTo ! RResponse(j, newR)
-        new Node(context, nodeId, i, newR, A, B, RResponses, AResponses, BResponses)
+        new Node(context, n, nodeId, i, newR, A, B, RResponses, AResponses, BResponses)
 
       case _@ABroadcast(j, v, replyTo) =>
         val newA: List[Set[Int]] = if (A.size <= j) {
@@ -43,7 +43,7 @@ class Node(context: ActorContext[Node.Command], nodeId: String, i: Int, R: Set[(
         } else
           A.updated(j, A(j) + v)
         replyTo ! AResponse(j, newA(j))
-        new Node(context, nodeId, i, R, newA, B, RResponses, AResponses, BResponses)
+        new Node(context, n, nodeId, i, R, newA, B, RResponses, AResponses, BResponses)
 
       case _@BBroadcast(j, flag, v, replyTo) =>
         val newB: List[Set[(Boolean, Int)]] = if (B.size <= j) {
@@ -57,11 +57,11 @@ class Node(context: ActorContext[Node.Command], nodeId: String, i: Int, R: Set[(
           B.updated(j, updatedBj)
         }
         replyTo ! BResponse(j, newB(j))
-        new Node(context, nodeId, i, R, A, newB, RResponses, AResponses, BResponses)
+        new Node(context, n, nodeId, i, R, A, newB, RResponses, AResponses, BResponses)
 
       case resp@RResponse(j, rcvdR) =>
         val newRResponses = RResponses :+ resp
-        if (newRResponses.size > ((Main.N + 1) / 2).floor) {
+        if (newRResponses.size > ((n + 1) / 2).floor) {
           var newR = R
           for (response <- newRResponses) {
             newR = newR union response.R
@@ -78,14 +78,14 @@ class Node(context: ActorContext[Node.Command], nodeId: String, i: Int, R: Set[(
           }
           val parentActorRef = context.toClassic.parent
           parentActorRef ! BroadcastA(ABroadcast(maxI, maxV, context.self))
-          new Node(context, nodeId, maxI, newR, A, B, List.empty, AResponses, BResponses)
+          new Node(context, n, nodeId, maxI, newR, A, B, List.empty, AResponses, BResponses)
         } else {
-          new Node(context, nodeId, i, R, A, B, newRResponses, AResponses, BResponses)
+          new Node(context, n, nodeId, i, R, A, B, newRResponses, AResponses, BResponses)
         }
 
       case resp@AResponse(j, rcvdAJ) =>
         val newAResponses = AResponses :+ resp
-        if (newAResponses.size > ((Main.N + 1) / 2).floor) {
+        if (newAResponses.size > ((n + 1) / 2).floor) {
           var S: Set[Int] = Set.empty
           for (response <- newAResponses) {
             S = S union response.aJ
@@ -96,14 +96,14 @@ class Node(context: ActorContext[Node.Command], nodeId: String, i: Int, R: Set[(
           } else {
             parentActorRef ! BroadcastB(BBroadcast(i, flag = false, S.max, context.self))
           }
-          new Node(context, nodeId, i, R, A, B, RResponses, List.empty, BResponses)
+          new Node(context, n, nodeId, i, R, A, B, RResponses, List.empty, BResponses)
         } else {
-          new Node(context, nodeId, i, R, A, B, RResponses, newAResponses, BResponses)
+          new Node(context, n, nodeId, i, R, A, B, RResponses, newAResponses, BResponses)
         }
 
       case resp@BResponse(j, rcvdBJ) =>
         val newBResponses = BResponses :+ resp
-        if (newBResponses.size > ((Main.N + 1) / 2).floor) {
+        if (newBResponses.size > ((n + 1) / 2).floor) {
           var S: Set[(Boolean, Int)] = Set.empty
           for (response <- newBResponses) {
             S = S union response.bJ
@@ -111,8 +111,8 @@ class Node(context: ActorContext[Node.Command], nodeId: String, i: Int, R: Set[(
           val parentActorRef = context.toClassic.parent
           if (S.size == 1) {
             if (S.head._1) {
-              context.log.info("Commit!")
-              parentActorRef ! Commit(S.head._2, nodeId)
+              parentActorRef ! Commit(S.head._2, nodeId, i)
+              return this
             }
           } else {
             val trueElement = S.filter(x => x._1)
@@ -124,9 +124,9 @@ class Node(context: ActorContext[Node.Command], nodeId: String, i: Int, R: Set[(
               propose(i + 1, S.maxBy(_._2)._2)
             }
           }
-          new Node(context, nodeId, i + 1, R, A, B, RResponses, AResponses, List.empty)
+          new Node(context, n, nodeId, i + 1, R, A, B, RResponses, AResponses, List.empty)
         } else {
-          new Node(context, nodeId, i, R, A, B, RResponses, AResponses, newBResponses)
+          new Node(context, n, nodeId, i, R, A, B, RResponses, AResponses, newBResponses)
         }
 
       case _@Start(v) =>

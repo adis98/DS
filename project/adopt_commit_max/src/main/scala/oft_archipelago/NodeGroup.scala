@@ -4,9 +4,7 @@ import akka.actor.ActorPath
 import akka.actor.typed.scaladsl.{AbstractBehavior, ActorContext, Behaviors, LoggerOps}
 import akka.actor.typed.{ActorRef, Behavior, PostStop, Signal}
 import oft_archipelago.Main.NodeRegistered
-import oft_archipelago.Node.Stop
-
-import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
 object NodeGroup {
@@ -15,106 +13,164 @@ object NodeGroup {
 
   sealed trait Command
 
-  final case class RequestTrackDevice(nodeId: String, replyTo: ActorRef[Main.Command]) extends Command
+  final case class RequestTrackDevice(nodeId: String, n: Int, replyTo: ActorRef[Main.Command]) extends Command
+
   final case class Start() extends Command
-  final case class Commit(value: Int, nodeId: String) extends Command
+
+  final case class Commit(value: Int, nodeId: String, i: Int) extends Command
+
   final case class BroadcastR(rBroadcast: Node.RBroadcast) extends Command
+
   final case class BroadcastA(aBroadcast: Node.ABroadcast) extends Command
+
   final case class BroadcastB(bBroadcast: Node.BBroadcast) extends Command
 }
 
 class NodeGroup(context: ActorContext[NodeGroup.Command])
   extends AbstractBehavior[NodeGroup.Command](context) {
+
   import NodeGroup._
 
   private var nodeIdToActor = Map.empty[String, ActorRef[Node.Command]]
-  private var disabledProcs = Map.empty[Int,Set[String]]
-  private var round= -1
+  private var nodeIdToCommit = Map.empty[String, Boolean]
+  private var disabledProcs = Map.empty[Int, Set[String]]
+  private var blockedABroadcasts = ListBuffer.empty[BroadcastA]
+  private var blockedRBroadcasts = ListBuffer.empty[BroadcastR]
+  private var blockedBBroadcasts = ListBuffer.empty[BroadcastB]
+  private var blockedAMailbox = Map.empty[ActorRef[Node.Command], ListBuffer[Node.ABroadcast]]
+  private var blockedBMailbox = Map.empty[ActorRef[Node.Command], ListBuffer[Node.BBroadcast]]
+  private var blockedRMailbox = Map.empty[ActorRef[Node.Command], ListBuffer[Node.RBroadcast]]
+  private val blockedProcesses = 0.2
+  private var maxRounds = 0
 
   context.log.info("NodeGroup started")
 
   override def onMessage(msg: Command): Behavior[Command] =
     msg match {
-      case trackMsg @ RequestTrackDevice(nodeId, replyTo) =>
+      case trackMsg@RequestTrackDevice(nodeId, n, replyTo) =>
         nodeIdToActor.get(nodeId) match {
           case Some(nodeActor) =>
             replyTo ! NodeRegistered(nodeActor)
           case None =>
             context.log.info("Creating node actor for {}", trackMsg.nodeId)
-            val nodeActor = context.spawn(Node(nodeId), s"node-$nodeId")
+            val nodeActor = context.spawn(Node(n, nodeId), s"node-$nodeId")
+            nodeIdToCommit += nodeId -> false
             nodeIdToActor += nodeId -> nodeActor
+            blockedRMailbox += nodeActor -> ListBuffer.empty[Node.RBroadcast]
+            blockedAMailbox += nodeActor -> ListBuffer.empty[Node.ABroadcast]
+            blockedBMailbox += nodeActor -> ListBuffer.empty[Node.BBroadcast]
             context.log.info("Map Size {}", nodeIdToActor.size)
-            if(nodeIdToActor.size > 19) {
+            if (nodeIdToActor.size > n - 1) {
               nodeIdToActor.foreach { case (_, nodeActor) =>
-                val value = Random.nextInt(10)
+                val value = Random.nextInt(n)
                 nodeActor ! Node.Start(value)
               }
             }
             replyTo ! NodeRegistered(nodeActor)
         }
         this
-      case _ @ BroadcastR(rBroadcast) =>
-        if(rBroadcast.i>round){
-          round=rBroadcast.i
-          blockNewProcesses(round)
+      case msg@BroadcastR(rBroadcast) =>
+        if (!disabledProcs.contains(rBroadcast.i)) {
+          blockNewProcesses(rBroadcast.i)
+          blockedRBroadcasts.foreach { case (broadcastR: BroadcastR) =>
+            nodeIdToActor.foreach { case (_, nodeActor) =>
+              nodeActor ! broadcastR.rBroadcast
+            }
+          }
+          blockedRMailbox.foreach { case (actorRef, listBuffer) =>
+            if (listBuffer.nonEmpty) {
+              listBuffer.foreach { case (message) =>
+                actorRef ! message
+              }
+              blockedRMailbox += actorRef -> ListBuffer.empty
+            }
+          }
+          blockedRBroadcasts = ListBuffer.empty[BroadcastR]
         }
-        val procsBlockedInRound=disabledProcs.get(rBroadcast.i)
-        if(!procsBlockedInRound.get.contains(rBroadcast.replyTo.path.name)){
+        val procsBlockedInRound = disabledProcs.get(rBroadcast.i)
+        if (!procsBlockedInRound.get.contains(rBroadcast.replyTo.path.name)) {
           nodeIdToActor.foreach { case (_, nodeActor) =>
-            if(nodeActor != rBroadcast.replyTo)
-              if(!procsBlockedInRound.get.contains(nodeActor.path.name)){
+            if (nodeActor != rBroadcast.replyTo)
+              if (!procsBlockedInRound.get.contains(nodeActor.path.name)) {
                 nodeActor ! rBroadcast
-              }else{
+              } else {
                 context.log.info("Process {} was blocked from receiving R-step message", nodeActor)
+                var nodeActorBlockedMailbox = blockedRMailbox.get(nodeActor).get
+                nodeActorBlockedMailbox += rBroadcast
+                blockedRMailbox += nodeActor -> nodeActorBlockedMailbox
               }
           }
-        }else{
+        } else {
           context.log.info("Process {} was blocked from sending R-step message", rBroadcast.replyTo)
+          blockedRBroadcasts += msg
         }
         this
-      case _ @ BroadcastA(aBroadcast) =>
-        if(aBroadcast.i>round){
-          round=aBroadcast.i
-          blockNewProcesses(round)
-        }
-        val procsBlockedInRound=disabledProcs.get(aBroadcast.i)
-        if(!procsBlockedInRound.get.contains(aBroadcast.replyTo.path.name)) {
-          nodeIdToActor.foreach { case (_, nodeActor) =>
-            if(nodeActor != aBroadcast.replyTo)
-            if(!procsBlockedInRound.get.contains(nodeActor.path.name)) {
-              nodeActor ! aBroadcast
-            }else{
-              context.log.info("Process {} was blocked from receiving A-step message", nodeActor)
+      case msg@BroadcastA(aBroadcast) =>
+        if (!disabledProcs.contains(aBroadcast.i)) {
+          blockNewProcesses(aBroadcast.i)
+          blockedABroadcasts.foreach { case (broadcastA: BroadcastA) =>
+            nodeIdToActor.foreach { case (_, nodeActor) =>
+              nodeActor ! broadcastA.aBroadcast
             }
           }
-        }else{
-          context.log.info("Process {} was blocked from sending A-step message", aBroadcast.replyTo)
+          blockedAMailbox.foreach { case (actorRef, listBuffer) =>
+            if (listBuffer.nonEmpty) {
+              listBuffer.foreach { case (message) =>
+                actorRef ! message
+              }
+            }
+            blockedAMailbox += actorRef -> ListBuffer.empty
+          }
+          blockedABroadcasts = ListBuffer.empty[BroadcastA]
+        }
+        nodeIdToActor.foreach { case (_, nodeActor) =>
+          if (nodeActor != aBroadcast.replyTo)
+            nodeActor ! aBroadcast
         }
         this
-      case _ @ BroadcastB(bBroadcast) =>
-        if(bBroadcast.i>round){
-          round=bBroadcast.i
-          blockNewProcesses(round)
-        }
-        val procsBlockedInRound=disabledProcs.get(bBroadcast.i)
-        if(!procsBlockedInRound.get.contains(bBroadcast.replyTo.path.name)) {
-          nodeIdToActor.foreach { case (_, nodeActor) =>
-            if(nodeActor != bBroadcast.replyTo)
-            if(!procsBlockedInRound.get.contains(nodeActor.path.name)) {
-              nodeActor ! bBroadcast
-            }else{
-              context.log.info("Process {} was blocked from receiving B-step message", nodeActor)
+      case msg
+        @BroadcastB(bBroadcast)
+      =>
+        if (!disabledProcs.contains(bBroadcast.i)) {
+          blockNewProcesses(bBroadcast.i)
+          blockedBBroadcasts.foreach { case (broadcastB: BroadcastB) =>
+            nodeIdToActor.foreach { case (_, nodeActor) =>
+              nodeActor ! broadcastB.bBroadcast
             }
           }
-        }else{
-          context.log.info("Process {} was blocked from sending B-step message", bBroadcast.replyTo)
+          blockedBMailbox.foreach { case (actorRef, listBuffer) =>
+            if (listBuffer.nonEmpty) {
+              listBuffer.foreach { case (message) =>
+                actorRef ! message
+              }
+            }
+            blockedBMailbox += actorRef -> ListBuffer.empty
+          }
+          blockedBBroadcasts = ListBuffer.empty[BroadcastB]
+        }
+        nodeIdToActor.foreach { case (_, nodeActor) =>
+          if (nodeActor != bBroadcast.replyTo)
+            nodeActor ! bBroadcast
         }
         this
-      case _ @ Start() =>
+      case _
+        @Start()
+      =>
         context.log.info("Starting Archipelago")
         this
-      case _ @ Commit(value, nodeId) =>
-        context.log.info("Received commit " + value.toString + " from " + nodeId)
+      case _
+        @Commit(value, nodeId, i)
+      =>
+        context.log.info("Received commit " + value.toString + " from " + nodeId + " in round " + i.toString)
+        nodeIdToCommit += nodeId -> true
+        val nonCommitedNodes = nodeIdToCommit.filter(!_._2)
+        context.log.info("values committed " + nonCommitedNodes.size.toString)
+        maxRounds = math.max(maxRounds, i)
+        val procsToDisable = (nodeIdToActor.size * blockedProcesses).floor.toInt
+        if (nonCommitedNodes.size == procsToDisable) {
+          context.log.info("Converged in " + maxRounds.toString + " rounds")
+          return Behaviors.empty
+        }
         this
     }
 
@@ -124,9 +180,9 @@ class NodeGroup(context: ActorContext[NodeGroup.Command])
       this
   }
 
-  def blockNewProcesses(round: Int): Unit ={
-      val rnd= new Random()
-      val procsToDisable = rnd.nextInt((nodeIdToActor.size-2)/2)
-      disabledProcs += (round -> rnd.shuffle(nodeIdToActor.values.map(c=> c.path.name)).take(procsToDisable).toSet)
+  def blockNewProcesses(round: Int): Unit = {
+    val rnd = new Random()
+    val procsToDisable = (nodeIdToActor.size * blockedProcesses).floor.toInt
+    disabledProcs += (round -> rnd.shuffle(nodeIdToActor.values.map(c => c.path.name)).take(procsToDisable).toSet)
   }
 }

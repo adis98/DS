@@ -1,9 +1,10 @@
 package oft_archipelago
 
-import akka.actor.ActorPath
 import akka.actor.typed.scaladsl.{AbstractBehavior, ActorContext, Behaviors, LoggerOps}
 import akka.actor.typed.{ActorRef, Behavior, PostStop, Signal}
 import oft_archipelago.Main.NodeRegistered
+
+import java.io.{BufferedWriter, File, FileWriter}
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
@@ -15,7 +16,7 @@ object NodeGroup {
 
   final case class RequestTrackDevice(nodeId: String, n: Int, replyTo: ActorRef[Main.Command]) extends Command
 
-  final case class Start() extends Command
+  final case class Start(f: Double) extends Command
 
   final case class Commit(value: Int, nodeId: String, i: Int) extends Command
 
@@ -40,7 +41,7 @@ class NodeGroup(context: ActorContext[NodeGroup.Command])
   private var blockedAMailbox = Map.empty[ActorRef[Node.Command], ListBuffer[Node.ABroadcast]]
   private var blockedBMailbox = Map.empty[ActorRef[Node.Command], ListBuffer[Node.BBroadcast]]
   private var blockedRMailbox = Map.empty[ActorRef[Node.Command], ListBuffer[Node.RBroadcast]]
-  private val blockedProcesses = 0.2
+  private var blockedProcesses: Double = 0
   private var maxRounds = 0
 
   context.log.info("NodeGroup started")
@@ -154,8 +155,9 @@ class NodeGroup(context: ActorContext[NodeGroup.Command])
         }
         this
       case _
-        @Start()
+        @Start(f: Double)
       =>
+        blockedProcesses=f
         context.log.info("Starting Archipelago")
         this
       case _
@@ -165,12 +167,15 @@ class NodeGroup(context: ActorContext[NodeGroup.Command])
         nodeIdToCommit += nodeId -> true
         val nonCommitedNodes = nodeIdToCommit.filter(!_._2)
         context.log.info("values committed " + nonCommitedNodes.size.toString)
-        maxRounds = math.max(maxRounds, i)
-        val procsToDisable = (nodeIdToActor.size * blockedProcesses).floor.toInt
-        if (nonCommitedNodes.size == procsToDisable) {
+        maxRounds = math.max(maxRounds, i+1)
+//        val procsToDisable = (nodeIdToActor.size * blockedProcesses).floor.toInt
+        if(nonCommitedNodes.size==0) {
           context.log.info("Converged in " + maxRounds.toString + " rounds")
+          logResults(maxRounds)
           return Behaviors.empty
         }
+        if(maxRounds>1000)
+          return Behaviors.empty
         this
     }
 
@@ -184,5 +189,12 @@ class NodeGroup(context: ActorContext[NodeGroup.Command])
     val rnd = new Random()
     val procsToDisable = (nodeIdToActor.size * blockedProcesses).floor.toInt
     disabledProcs += (round -> rnd.shuffle(nodeIdToActor.values.map(c => c.path.name)).take(procsToDisable).toSet)
+  }
+
+  def logResults(rounds: Int): Unit ={
+    val bw = new BufferedWriter(new FileWriter(new File("file.txt"), true))
+    val stringToWrite = this.nodeIdToActor.size.toString +" "+this.blockedProcesses.toString+" "+maxRounds.toString + "\n"
+    bw.write(stringToWrite)
+    bw.close
   }
 }

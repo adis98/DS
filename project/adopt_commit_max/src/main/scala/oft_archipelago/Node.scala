@@ -117,10 +117,10 @@ class Node(context: ActorContext[Node.Command], n: Int, nodeId: String, i: Int, 
           } else {
             val trueElement = S.filter(x => x._1)
             if (trueElement.size == 1) {
-              context.log.info("Adopt! single elem " + trueElement.head._2 + " in " + nodeId + " " + (i+1).toString)
+//              context.log.info("Adopt! single elem " + trueElement.head._2 + " in " + nodeId + " " + (i+1).toString)
               propose(i + 1, trueElement.head._2)
             } else {
-              context.log.info("Adopt! multiple elem in " + nodeId + " " + (i+1).toString)
+//              context.log.info("Adopt! multiple elem in " + nodeId + " " + (i+1).toString)
               propose(i + 1, S.maxBy(_._2)._2)
             }
           }
@@ -130,7 +130,7 @@ class Node(context: ActorContext[Node.Command], n: Int, nodeId: String, i: Int, 
         }
 
       case _@Start(v) =>
-        context.log.info("Started! in nodeId " + nodeId)
+//        context.log.info("Started! in nodeId " + nodeId)
         propose(i, v)
         this
       case _@Stop() =>

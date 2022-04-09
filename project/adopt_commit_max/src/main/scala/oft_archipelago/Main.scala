@@ -40,13 +40,13 @@ class Main(context: ActorContext[Main.Command], nodes: Int) extends AbstractBeha
 
 object ActorHierarchyExperiments extends App {
   val testSystem = ActorSystem(Main(), "testSystem")
-  testSystem ! Start(80,0)
+  testSystem ! Start(128,0.4)
 }
 
 object ExperimentalRuns extends App {
-  val disabledPercPerRound = Set[Double](0.1,0.2,0.3,0.4)
-  val procsPerRound= Set[Int](8,4,16)
-  val scenarioRuns=30
+  val disabledPercPerRound = Set[Double](0.4)
+  val procsPerRound= Set[Int](128)
+  val scenarioRuns=200
   var id=0
   procsPerRound.foreach{ case(procsNum) =>
     disabledPercPerRound.foreach{ case(disabledPerc) =>

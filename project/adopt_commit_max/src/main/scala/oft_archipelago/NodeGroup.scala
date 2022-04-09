@@ -44,7 +44,7 @@ class NodeGroup(context: ActorContext[NodeGroup.Command])
   private var blockedProcesses: Double = 0
   private var maxRounds = 0
 
-  context.log.info("NodeGroup started")
+//  context.log.info("NodeGroup started")
 
   override def onMessage(msg: Command): Behavior[Command] =
     msg match {
@@ -53,14 +53,14 @@ class NodeGroup(context: ActorContext[NodeGroup.Command])
           case Some(nodeActor) =>
             replyTo ! NodeRegistered(nodeActor)
           case None =>
-            context.log.info("Creating node actor for {}", trackMsg.nodeId)
+//            context.log.info("Creating node actor for {}", trackMsg.nodeId)
             val nodeActor = context.spawn(Node(n, nodeId), s"node-$nodeId")
             nodeIdToCommit += nodeId -> false
             nodeIdToActor += nodeId -> nodeActor
             blockedRMailbox += nodeActor -> ListBuffer.empty[Node.RBroadcast]
             blockedAMailbox += nodeActor -> ListBuffer.empty[Node.ABroadcast]
             blockedBMailbox += nodeActor -> ListBuffer.empty[Node.BBroadcast]
-            context.log.info("Map Size {}", nodeIdToActor.size)
+//            context.log.info("Map Size {}", nodeIdToActor.size)
             if (nodeIdToActor.size > n - 1) {
               nodeIdToActor.foreach { case (_, nodeActor) =>
                 val value = Random.nextInt(n)
@@ -95,14 +95,14 @@ class NodeGroup(context: ActorContext[NodeGroup.Command])
               if (!procsBlockedInRound.get.contains(nodeActor.path.name)) {
                 nodeActor ! rBroadcast
               } else {
-                context.log.info("Process {} was blocked from receiving R-step message", nodeActor)
+//                context.log.info("Process {} was blocked from receiving R-step message", nodeActor)
                 var nodeActorBlockedMailbox = blockedRMailbox.get(nodeActor).get
                 nodeActorBlockedMailbox += rBroadcast
                 blockedRMailbox += nodeActor -> nodeActorBlockedMailbox
               }
           }
         } else {
-          context.log.info("Process {} was blocked from sending R-step message", rBroadcast.replyTo)
+//          context.log.info("Process {} was blocked from sending R-step message", rBroadcast.replyTo)
           blockedRBroadcasts += msg
         }
         this
@@ -158,19 +158,19 @@ class NodeGroup(context: ActorContext[NodeGroup.Command])
         @Start(f: Double)
       =>
         blockedProcesses=f
-        context.log.info("Starting Archipelago")
+//        context.log.info("Starting Archipelago")
         this
       case _
         @Commit(value, nodeId, i)
       =>
-        context.log.info("Received commit " + value.toString + " from " + nodeId + " in round " + i.toString)
+//        context.log.info("Received commit " + value.toString + " from " + nodeId + " in round " + i.toString)
         nodeIdToCommit += nodeId -> true
         val nonCommitedNodes = nodeIdToCommit.filter(!_._2)
-        context.log.info("values committed " + nonCommitedNodes.size.toString)
+//        context.log.info("values committed " + nonCommitedNodes.size.toString)
         maxRounds = math.max(maxRounds, i+1)
 //        val procsToDisable = (nodeIdToActor.size * blockedProcesses).floor.toInt
         if(nonCommitedNodes.size==0) {
-          context.log.info("Converged in " + maxRounds.toString + " rounds")
+//          context.log.info("Converged in " + maxRounds.toString + " rounds")
           logResults(maxRounds)
           return Behaviors.empty
         }
@@ -181,7 +181,7 @@ class NodeGroup(context: ActorContext[NodeGroup.Command])
 
   override def onSignal: PartialFunction[Signal, Behavior[Command]] = {
     case PostStop =>
-      context.log.info("NodeGroup stopped")
+//      context.log.info("NodeGroup stopped")
       this
   }
 

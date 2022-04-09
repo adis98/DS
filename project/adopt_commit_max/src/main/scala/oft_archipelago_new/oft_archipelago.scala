@@ -11,9 +11,9 @@ object Main{
   var K = 3   //the max number of disabled processes per-round
   val rounds =100 //no. of rounds
   val adversaryMode = false //not developed for oft archipelago. Don't use
-  val percentFail = 0.75 //set this to -1 to specify exact number of disabled
+  val percentFail = 0.5 //set this to -1 to specify exact number of disabled
   //TODO: Currently adversaryMode only works for 2 processors
-  val N = 4 //the number of processors
+  val N = 128 //the number of processors
   if(percentFail != -1){
     K = (Math.round(N * percentFail)).toInt
   }

@@ -3,7 +3,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
 
-val filename = "C:\\Users\\adity\\Documents\\Course_stuff\\DS\\project\\adopt_commit_max\\file.txt"
+val filename = "C:\\Users\\Th3o0\\Desktop\\University\\MSC\\IN4391 - Distributed Systems - Q3 2022\\Assignment\\DS\\project\\adopt_commit_max\\file.txt"
 val fileSource = Source.fromFile(filename)
 var failures = 0.0
 var successes = 0.0
